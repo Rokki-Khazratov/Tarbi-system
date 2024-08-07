@@ -11,8 +11,16 @@ class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = UserSerializer
 
 class KidListCreateAPIView(generics.ListCreateAPIView):
-    queryset = Kid.objects.all()
-    serializer_class = KidSerializer
+    serializer_class = KidsSerializer
+
+    def get_queryset(self):
+        queryset = Kid.objects.all()
+        is_paid = self.request.query_params.get('is_paid')
+
+        if is_paid is not None:
+            is_paid = is_paid.lower() in ['true', '1']
+            queryset = queryset.filter(month_archives__is_paid=is_paid).distinct()
+        return queryset
 
 class KidRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Kid.objects.all()

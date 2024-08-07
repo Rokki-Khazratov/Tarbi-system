@@ -1,12 +1,24 @@
 from rest_framework import serializers
-from .models import *
+from .models import User, Kid, Teacher, Group, Journal, MonthArchive
 
 class MonthArchiveSerializer(serializers.ModelSerializer):
+    month = serializers.CharField(source='get_month_display', read_only=True)
+    kid = serializers.CharField(source='kid.full_name', read_only=True)
+
     class Meta:
         model = MonthArchive
         fields = [
-            'year', 'month_name', 'kid', 'missed_days', 'tarif', 'left_sum', 
+            'year', 'month','kid', 'missed_days', 'tarif', 'left_sum', 
             'missday_count', 'missday_cost', 'is_paid'
+        ]
+
+
+
+class KidsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Kid
+        fields = [
+            'id', 'full_name', 'phone_number', 'date_of_birth', 'gender'
         ]
 
 class KidSerializer(serializers.ModelSerializer):

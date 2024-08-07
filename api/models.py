@@ -1,5 +1,5 @@
 from django.db import models
-from django.contrib.postgres.fields import ArrayField
+import json
 
 class MONTH_CHOICES(models.IntegerChoices):
     JANUARY = 1, 'January'
@@ -41,10 +41,10 @@ class Kid(models.Model):
 
 class MonthArchive(models.Model):
     year = models.IntegerField()
-    month_name = models.IntegerField(choices=MONTH_CHOICES.choices)
-    kid = models.ForeignKey(Kid, on_delete=models.CASCADE)
+    month = models.IntegerField(choices=MONTH_CHOICES.choices)
+    kid = models.ForeignKey(Kid, related_name='month_archives', on_delete=models.CASCADE)
 
-    missed_days = ArrayField(models.IntegerField())
+    missed_days = models.TextField()
     tarif = models.DecimalField(max_digits=10, decimal_places=2)
     left_sum = models.DecimalField(max_digits=10, decimal_places=2)
 
@@ -54,11 +54,21 @@ class MonthArchive(models.Model):
     is_paid = models.BooleanField()
 
     def __str__(self):
-        return f"{self.year}-{self.get_month_name_display()} for {self.kid.full_name}"
+        return f"{self.year}-{self.get_month_display()} for {self.kid.full_name}"
 
     def save(self, *args, **kwargs):
-        self.missday_count = len(self.missed_days)
+        self.missday_count = len(json.loads(self.missed_days))
         super().save(*args, **kwargs)
+
+
+
+
+
+
+
+
+        
+
 
 class Teacher(models.Model):
     name = models.CharField(max_length=100)

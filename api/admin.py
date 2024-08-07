@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import User, Kid, Teacher, Group, Journal, Attendance, MonthArchive
+from .models import User, Kid, Teacher, Group, Journal , MonthArchive
 from .forms import MonthArchiveForm
 
 @admin.register(User)
@@ -33,15 +33,10 @@ class JournalAdmin(admin.ModelAdmin):
     search_fields = ('group__teacher__name', 'month')
     list_filter = ('group', 'month')
 
-@admin.register(Attendance)
-class AttendanceAdmin(admin.ModelAdmin):
-    list_display = ('id', 'kid', 'date', 'arrived')
-    search_fields = ('kid__full_name', 'date')
-    list_filter = ('date', 'arrived')
-
 @admin.register(MonthArchive)
 class MonthArchiveAdmin(admin.ModelAdmin):
     form = MonthArchiveForm
-    list_display = ('id', 'year', 'month_name', 'kid', 'tarif', 'left_sum', 'missday_count', 'missday_cost', 'is_paid')
-    search_fields = ('year', 'month_name', 'kid__full_name')
-    list_filter = ('year', 'month_name', 'is_paid')
+    list_display = ('id', 'year', 'month', 'kid', 'tarif', 'left_sum', 'missday_count', 'missday_cost', 'is_paid')
+    search_fields = ('year', 'month', 'kid__full_name')
+    list_filter = ('year', 'month', 'is_paid')
+    readonly_fields = ('missday_count',)
