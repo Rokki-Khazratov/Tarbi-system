@@ -1,6 +1,6 @@
 from rest_framework import generics
-from .models import User, Kid, Teacher, Group, Journal
-from .serializers import UserSerializer, KidSerializer, TeacherSerializer, GroupSerializer, JournalSerializer
+from .models import *
+from .serializers import *
 
 class UserListCreateAPIView(generics.ListCreateAPIView):
     queryset = User.objects.all()
@@ -41,3 +41,11 @@ class JournalListCreateAPIView(generics.ListCreateAPIView):
 class JournalRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Journal.objects.all()
     serializer_class = JournalSerializer
+
+class MonthArchiveListCreateAPIView(generics.ListCreateAPIView):
+    queryset = MonthArchive.objects.all()
+    serializer_class = MonthArchiveSerializer
+
+class MonthArchiveRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = MonthArchive.objects.all()
+    serializer_class = MonthArchiveSerializer
