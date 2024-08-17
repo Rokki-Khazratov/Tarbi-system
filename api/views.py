@@ -69,6 +69,19 @@ class KidRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = KidSerializer
 
 
+
+class IncomeTransactionListCreateAPIView(generics.ListCreateAPIView):
+    queryset = IncomeTransaction.objects.all()
+    serializer_class = IncomeTransactionSerializer
+
+
+
+class IncomeTransactionRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = IncomeTransaction.objects.all()
+    serializer_class = IncomeTransactionSerializer
+
+
+
 class MonthArchiveListCreateAPIView(generics.ListCreateAPIView):
     queryset = MonthArchive.objects.all()
     serializer_class = MonthArchiveSerializer
@@ -76,6 +89,7 @@ class MonthArchiveListCreateAPIView(generics.ListCreateAPIView):
 class MonthArchiveRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     queryset = MonthArchive.objects.all()
     serializer_class = MonthArchiveSerializer
+
 
 
 
@@ -104,3 +118,5 @@ class UserListCreateAPIView(generics.ListCreateAPIView):
 class UserRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
+
+    

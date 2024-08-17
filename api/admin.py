@@ -53,3 +53,21 @@ class MonthArchiveAdmin(admin.ModelAdmin):
             obj.is_paid = True
 
         super().save_model(request, obj, form, change)
+
+
+
+
+@admin.register(IncomeTransaction)
+class IncomeTransactionAdmin(admin.ModelAdmin):
+    list_display = ('kid', 'amount', 'date', 'type', 'comment')
+    list_filter = ('type', 'date')
+    search_fields = ('kid__full_name', 'comment')
+    readonly_fields = ('date',)  # Make the date field read-only as it is auto-generated
+
+    def has_add_permission(self, request):
+        # Custom logic if needed to restrict adding transactions
+        return super().has_add_permission(request)
+
+    def has_delete_permission(self, request, obj=None):
+        # Custom logic if needed to restrict deleting transactions
+        return super().has_delete_permission(request)

@@ -62,12 +62,61 @@ class MonthArchive(models.Model):
         return f"{self.year}-{self.get_month_display()} for {self.kid.full_name}"
 
     def save(self, *args, **kwargs):
-        self.missday_count = len(json.loads(self.missed_days))
-        if not self.is_paid:
-            self.left_sum = self.tarif - (self.missday_count * self.missday_cost)
-        if self.left_sum <= 0.0:
-            self.is_paid = True
+        # Извлекаем наш кастомный аргумент `skip_calculation`, чтобы он не передавался дальше
+        skip_calculation = kwargs.pop('skip_calculation', False)
+
+        # Проверяем, нужно ли пересчитывать `left_sum`
+        if not skip_calculation:
+            self.missday_count = len(json.loads(self.missed_days))
+            if not self.is_paid:
+                # Только пересчитываем `left_sum`, если это явно необходимо
+                self.left_sum = self.tarif - (self.missday_count * self.missday_cost)
+                if self.left_sum <= 0.0:
+                    self.is_paid = True
+
+        # Теперь вызываем стандартный `save` без кастомных аргументов
         super().save(*args, **kwargs)
+
+
+
+    def apply_payment(self, amount):
+        self.left_sum -= amount
+        if self.left_sum <= 0:
+            self.is_paid = True
+            self.left_sum = 0
+        # Применяем оплату и сохраняем изменения без пересчета `left_sum`
+        self.save(skip_calculation=True)
+
+
+
+
+
+class IncomeTransaction(models.Model):
+    kid = models.ForeignKey(Kid, related_name='income_transactions', on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    date = models.DateField(auto_now_add=True)
+    comment = models.TextField(null=True, blank=True)
+    TYPE_CHOICES = [
+        ('card', 'Card'),
+        ('cash', 'Cash'),
+        ('account', 'Account'),
+    ]
+    type = models.CharField(max_length=10, choices=TYPE_CHOICES)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        
+        # Обновляем архив ребенка после создания транзакции
+        kid = self.kid
+        current_month_archive = kid.month_archives.filter(is_paid=False).order_by('year', 'month').first()
+
+        if current_month_archive:
+            print(f"Обновляем архив: {current_month_archive.year}-{current_month_archive.get_month_display()}")
+            current_month_archive.apply_payment(self.amount)
+        else:
+            print("Не найден неоплаченный архив.")
+
+
 
 
 

@@ -1,14 +1,63 @@
 from rest_framework import serializers
 from .models import *
+from decimal import Decimal
+
+
+
+
+
+class IncomeTransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IncomeTransaction
+        fields = '__all__'
+
+
+    
+
+    def create(self, validated_data):
+        print("Начало создания транзакции")
+        transaction = super().create(validated_data)
+        
+        kid = transaction.kid
+        print(f"Транзакция создана для ребёнка: {kid.full_name}, сумма: {transaction.amount}")
+
+        # Получаем архив месяца, который еще не оплачен (самый старый)
+        current_month_archive = kid.month_archives.filter(is_paid=False).order_by('year', 'month').first()
+        print(f"Найден архив для обновления: {current_month_archive}")
+
+        if current_month_archive:
+            print(f"Текущий архив перед вычитанием: {current_month_archive.year}-{current_month_archive.get_month_display()}, left_sum: {current_month_archive.left_sum}")
+
+            # Вычитаем сумму транзакции из left_sum
+            current_month_archive.left_sum -= transaction.amount
+
+            print(f"Обновленное значение left_sum: {current_month_archive.left_sum}")
+
+            # Если сумма left_sum становится <= 0, помечаем как оплаченное и устанавливаем left_sum в 0
+            if current_month_archive.left_sum <= 0:
+                current_month_archive.is_paid = True
+                current_month_archive.left_sum = 0
+                print("Архив помечен как оплачен")
+
+            # Сохраняем изменения в архиве
+            current_month_archive.save()
+            print(f"Архив сохранен: left_sum = {current_month_archive.left_sum}, is_paid = {current_month_archive.is_paid}")
+        else:
+            print("Не найден неоплаченный архив")
+
+        return transaction
+
+
 
 class MonthArchiveSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(read_only=True)
     month = serializers.CharField(source='get_month_display', read_only=True)
     kid = serializers.CharField(source='kid.full_name', read_only=True)
 
     class Meta:
         model = MonthArchive
         fields = [
-            'year', 'month', 'kid', 'missed_days', 'tarif', 'left_sum', 
+            'id', 'year', 'month', 'kid', 'missed_days', 'tarif', 'left_sum', 
             'missday_count', 'missday_cost', 'is_paid'
         ]
 
@@ -17,7 +66,6 @@ class MonthArchiveSerializer(serializers.ModelSerializer):
         representation['missed_days'] = json.loads(instance.missed_days)  # Convert JSON string back to a list
         return representation
 
-
     def validate(self, data):
         # At the start of the month, ensure left_sum equals tarif
         if self.instance is None or not self.instance.pk:
@@ -25,23 +73,51 @@ class MonthArchiveSerializer(serializers.ModelSerializer):
         return data
 
     def save(self, **kwargs):
-        # Get the instance or create a new one
         instance = super().save(**kwargs)
 
         # Calculate missday_count based on missed_days
         instance.missday_count = len(json.loads(instance.missed_days))
 
-        # Calculate left_sum if is_paid is still False
-        if not instance.is_paid:
-            instance.left_sum = instance.tarif - (instance.missday_count * instance.missday_cost)
-        
-        # Automatically mark as paid if left_sum is 0.0
+        # Check if 'left_sum' is provided in the initial data
+        if 'left_sum' in self.initial_data:
+            # Respect the manually provided left_sum
+            instance.left_sum = Decimal(self.initial_data['left_sum'])
+        else:
+            # Recalculate left_sum only if not manually provided
+            if not instance.is_paid:
+                instance.left_sum = instance.tarif - (instance.missday_count * instance.missday_cost)
+
+        # Automatically mark as paid if left_sum is 0.0 or less
         if instance.left_sum <= 0.0:
             instance.is_paid = True
 
-        # Save the instance with the updated values
         instance.save()
         return instance
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+
+        # Calculate missday_count based on missed_days
+        instance.missday_count = len(json.loads(instance.missed_days))
+
+        # Check if 'left_sum' is provided in the initial data
+        if 'left_sum' in self.initial_data:
+            # Respect the manually provided left_sum
+            instance.left_sum = Decimal(self.initial_data['left_sum'])
+        else:
+            # Recalculate left_sum only if not manually provided
+            if not instance.is_paid:
+                instance.left_sum = instance.tarif - (instance.missday_count * instance.missday_cost)
+
+        # Automatically set is_paid to true if left_sum is 0 or less
+        if instance.left_sum <= 0.0:
+            instance.is_paid = True
+
+        instance.save()
+        return instance
+
+
+
 
 
 class StuffSerializer(serializers.ModelSerializer):
