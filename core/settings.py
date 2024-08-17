@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     'rest_framework',
+    'drf_dark_shade',
     'api',
     # 'whitenoise.runserver_nostatic',  # Add this line
     # 'corsheaders',  # Add this line
@@ -81,6 +82,13 @@ DATABASES = {
     }
 }
 
+REST_FRAMEWORK = {
+    'DEFAULT_RENDERER_CLASSES': (
+        'rest_framework.renderers.JSONRenderer',
+        'drf_dark_shade.renderers.DeepForestBrowsableAPIRenderer',
+    )
+}
+
 
 
 # Password validation
@@ -124,6 +132,7 @@ CORS_ALLOW_HEADERS = [
     'Origin',
     'X-CSRFToken',
 ]
+
 
 LANGUAGE_CODE = 'en-us'
 

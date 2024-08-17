@@ -34,10 +34,11 @@ class Kid(models.Model):
     full_name = models.CharField(max_length=100)
     phone_number = models.CharField(max_length=15)
     date_of_birth = models.DateField()
-    gender = models.CharField(max_length=2, choices=GENDER_CHOICES)
+    sex = models.CharField(max_length=2, choices=GENDER_CHOICES)
 
     def __str__(self):
         return self.full_name
+
 
 class MonthArchive(models.Model):
     year = models.IntegerField()
@@ -46,18 +47,26 @@ class MonthArchive(models.Model):
 
     missed_days = models.TextField()
     tarif = models.DecimalField(max_digits=10, decimal_places=2)
-    left_sum = models.DecimalField(max_digits=10, decimal_places=2)
-
-    missday_count = models.IntegerField(editable=False)
+    left_sum = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    missday_count = models.IntegerField(editable=False, default=0)
     missday_cost = models.DecimalField(max_digits=10, decimal_places=2)
 
     is_paid = models.BooleanField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['kid', 'year', 'month'], name='unique_kid_month_year')
+        ]
 
     def __str__(self):
         return f"{self.year}-{self.get_month_display()} for {self.kid.full_name}"
 
     def save(self, *args, **kwargs):
         self.missday_count = len(json.loads(self.missed_days))
+        if not self.is_paid:
+            self.left_sum = self.tarif - (self.missday_count * self.missday_cost)
+        if self.left_sum <= 0.0:
+            self.is_paid = True
         super().save(*args, **kwargs)
 
 
@@ -68,18 +77,41 @@ class MonthArchive(models.Model):
 
 
         
+    
+class Stuff(models.Model):
+    SEX_CHOICES = [
+        ('M', 'Male'),
+        ('F', 'Female'),
+        ('O', 'Other'),
+    ]
 
+    POSITION_CHOICES = [
+        ('boss', 'Boss'),
+        ('administrator', 'Administrator'),
+        ('teacher', 'Teacher'),
+        ('assistant', 'Assistant'),
+        ('coder', 'Coder'),
+        ('cleaner', 'Cleaner'),
+        ('cook', 'Cook'),
+        ('other', 'Other'),
+    ]
 
-class Teacher(models.Model):
     name = models.CharField(max_length=100)
-    address = models.CharField(max_length=255)
+    birthday = models.DateField()
+    sex = models.CharField(max_length=1, choices=SEX_CHOICES)
     phone_number = models.CharField(max_length=15)
+    position = models.CharField(max_length=50, choices=POSITION_CHOICES)
+    password = models.CharField(max_length=128)  # Storing hashed password
+    start_date = models.DateField()
+    salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     def __str__(self):
         return self.name
 
+
+
 class Group(models.Model):
-    teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE)
+    teacher = models.ForeignKey(Stuff, limit_choices_to={'position': 'teacher'}, on_delete=models.CASCADE)
     kids = models.ManyToManyField(Kid)
 
     def __str__(self):
