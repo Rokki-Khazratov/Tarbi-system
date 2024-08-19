@@ -142,17 +142,36 @@ class KidsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Kid
         fields = [
-            'id', 'full_name', 'phone_number', 'date_of_birth', 'sex'
+            'id', 'full_name', 'phone_number', 'date_of_birth', 'sex','balance'
         ]
 
 class KidSerializer(serializers.ModelSerializer):
-    month_archives = MonthArchiveSerializer(many=True, read_only=True)
+    month_archives = serializers.SerializerMethodField()
 
     class Meta:
         model = Kid
-        fields = [
-            'id', 'full_name', 'phone_number', 'date_of_birth', 'sex', 'month_archives'
-        ]
+        fields = ['id', 'full_name', 'phone_number', 'date_of_birth', 'sex', 'balance', 'month_archives']
+
+    def get_month_archives(self, obj):
+        filter_is_paid = self.context.get('filter_is_paid', None)
+
+        archives = obj.month_archives.all()
+
+        if filter_is_paid is not None:
+            # Преобразуем строку в логическое значение
+            if filter_is_paid.lower() == 'true':
+                filter_is_paid = True
+            elif filter_is_paid.lower() == 'false':
+                filter_is_paid = False
+            else:
+                raise serializers.ValidationError("Invalid value for 'is_paid'. Must be 'true' or 'false'.")
+            
+            # Применяем фильтрацию
+            archives = archives.filter(is_paid=filter_is_paid)
+
+        return MonthArchiveSerializer(archives, many=True).data
+
+
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:

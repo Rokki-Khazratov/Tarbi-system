@@ -7,8 +7,8 @@ urlpatterns = [
     path('kids/<int:pk>/', KidRetrieveUpdateDestroyAPIView.as_view(), name='kid-retrieve-update-destroy'),
     path('month-archives/<int:pk>/', MonthArchiveRetrieveUpdateDestroyAPIView.as_view(), name='month-archive-retrieve-update'),
 
-    path('income-transactions/', IncomeTransactionListCreateAPIView.as_view(), name='income-transaction-list-create'),
-    path('income-transactions/<int:pk>/', IncomeTransactionRetrieveUpdateDestroyAPIView.as_view(), name='income-transaction-retrieve-update-destroy'),
+    path('incometransactions/', IncomeTransactionListCreateAPIView.as_view(), name='income-transaction-list-create'),
+path('incometransactions/<int:pk>/', IncomeTransactionRetrieveUpdateDestroyAPIView.as_view(), name='income-transaction-retrieve-update-destroy'),
     
     path('stuff/', StaffListAPIView.as_view(), name='staff-list'),
     path('stuff/<int:pk>/', StuffDetailAPIView.as_view(), name='stuff-detail'),

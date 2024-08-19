@@ -25,6 +25,8 @@ class User(models.Model):
     phone_number = models.CharField(max_length=15)
     role = models.CharField(max_length=10, choices=ROLE_CHOICES)
 
+
+
 class Kid(models.Model):
     GENDER_CHOICES = [
         ('M', 'Male'),
@@ -35,9 +37,41 @@ class Kid(models.Model):
     phone_number = models.CharField(max_length=15)
     date_of_birth = models.DateField()
     sex = models.CharField(max_length=2, choices=GENDER_CHOICES)
+    balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     def __str__(self):
         return self.full_name
+
+    def apply_payment_to_debt(self, amount):
+        print(f"Начальный баланс: {self.balance}")
+        remaining_amount = amount + self.balance  # Учитываем деньги на балансе
+
+        # Получаем все неоплаченные архивы в хронологическом порядке
+        unpaid_archives = self.month_archives.filter(is_paid=False).order_by('year', 'month')
+
+        for archive in unpaid_archives:
+            if remaining_amount <= 0:
+                break
+
+            if remaining_amount >= archive.left_sum:
+                # Если достаточно денег, чтобы полностью погасить долг
+                remaining_amount -= archive.left_sum
+                archive.left_sum = 0
+                archive.is_paid = True
+                print(f"Оплачен архив: {archive.year}-{archive.get_month_display()}")
+            else:
+                # Если денег недостаточно для полного погашения, частично погашаем долг
+                archive.left_sum -= remaining_amount
+                remaining_amount = 0
+
+            archive.save()
+
+        # Обновляем баланс ребенка
+        self.balance = remaining_amount
+        self.save()
+        print(f"Обновленный баланс: {self.balance}")
+
+
 
 
 class MonthArchive(models.Model):
@@ -106,16 +140,8 @@ class IncomeTransaction(models.Model):
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
         
-        # Обновляем архив ребенка после создания транзакции
-        kid = self.kid
-        current_month_archive = kid.month_archives.filter(is_paid=False).order_by('year', 'month').first()
-
-        if current_month_archive:
-            print(f"Обновляем архив: {current_month_archive.year}-{current_month_archive.get_month_display()}")
-            current_month_archive.apply_payment(self.amount)
-        else:
-            print("Не найден неоплаченный архив.")
-
+        # Применяем платеж к долгам и обновляем баланс
+        self.kid.apply_payment_to_debt(self.amount)
 
 
 

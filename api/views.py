@@ -68,6 +68,11 @@ class KidRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Kid.objects.all()
     serializer_class = KidSerializer
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['filter_is_paid'] = self.request.query_params.get('is_paid', None)
+        return context
+
 
 
 class IncomeTransactionListCreateAPIView(generics.ListCreateAPIView):
