@@ -1,5 +1,6 @@
 from django.db import models
 import json
+from django.db import transaction
 
 class MONTH_CHOICES(models.IntegerChoices):
     JANUARY = 1, 'January'
@@ -41,35 +42,68 @@ class Kid(models.Model):
 
     def __str__(self):
         return self.full_name
+    
+    
 
     def apply_payment_to_debt(self, amount):
-        print(f"Начальный баланс: {self.balance}")
-        remaining_amount = amount + self.balance  # Учитываем деньги на балансе
+        with transaction.atomic():  # Включаем атомарную транзакцию
+            print(f"Начальный баланс: {self.balance}")
+            remaining_amount = amount + self.balance
 
-        # Получаем все неоплаченные архивы в хронологическом порядке
-        unpaid_archives = self.month_archives.filter(is_paid=False).order_by('year', 'month')
+            if remaining_amount > 0:
+                unpaid_archives = self.month_archives.filter(is_paid=False).order_by('year', 'month')
 
-        for archive in unpaid_archives:
-            if remaining_amount <= 0:
-                break
+                if unpaid_archives.exists():
+                    print(f"Найдены неоплаченные архивы: {len(unpaid_archives)}")
+                else:
+                    print("Не найдены неоплаченные архивы")
+                    self.balance = remaining_amount
+                    self.save()
+                    return
 
-            if remaining_amount >= archive.left_sum:
-                # Если достаточно денег, чтобы полностью погасить долг
-                remaining_amount -= archive.left_sum
-                archive.left_sum = 0
-                archive.is_paid = True
-                print(f"Оплачен архив: {archive.year}-{archive.get_month_display()}")
+                for archive in unpaid_archives:
+                    print(f"Remaining_amount перед итерацией: {remaining_amount}")
+                    print(f"Обрабатываем архив: {archive.year}-{archive.get_month_display()}, текущий долг: {archive.left_sum}")
+
+                    if remaining_amount >= archive.left_sum:
+                        remaining_amount -= archive.left_sum
+                        archive.left_sum = 0
+                        archive.is_paid = True
+                        archive.save(update_fields=['left_sum', 'is_paid'])
+                        print(f"Архив {archive.year}-{archive.get_month_display()} полностью оплачен, остаток денег: {remaining_amount}")
+                    else:
+                        new = archive.left_sum - remaining_amount
+                        remaining_amount = 0
+                        if new > 0:  # Сравниваем с 'new', а не с 'archive.left_sum'
+                            print("in if",f"new_sum = {new}")
+                            archive.is_paid = False
+                            archive.left_sum = new
+                        else:
+                            archive.is_paid = True  # Если остаток стал 0 или меньше, то помечаем как оплаченный
+
+                        archive.save()  # Сохраняем изменения в архиве
+
+                    print(f"Частично погашаем: {archive.year}-{archive.get_month_display()}, остаток: {archive.left_sum}, is_paid после сохранения: {archive.is_paid}")
+                    return
+
+                self.balance = remaining_amount
+                self.save(update_fields=['balance'])
             else:
-                # Если денег недостаточно для полного погашения, частично погашаем долг
-                archive.left_sum -= remaining_amount
-                remaining_amount = 0
+                self.balance = 0
+                self.save(update_fields=['balance'])
 
-            archive.save()
+            print(f"Финальный баланс: {self.balance}, осталось денег после оплаты: {remaining_amount}")
 
-        # Обновляем баланс ребенка
-        self.balance = remaining_amount
-        self.save()
-        print(f"Обновленный баланс: {self.balance}")
+
+
+
+    
+
+
+
+
+
+
 
 
 
@@ -85,7 +119,7 @@ class MonthArchive(models.Model):
     missday_count = models.IntegerField(editable=False, default=0)
     missday_cost = models.DecimalField(max_digits=10, decimal_places=2)
 
-    is_paid = models.BooleanField()
+    is_paid = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
@@ -96,29 +130,34 @@ class MonthArchive(models.Model):
         return f"{self.year}-{self.get_month_display()} for {self.kid.full_name}"
 
     def save(self, *args, **kwargs):
-        # Извлекаем наш кастомный аргумент `skip_calculation`, чтобы он не передавался дальше
-        skip_calculation = kwargs.pop('skip_calculation', False)
+        # Пересчитываем количество пропущенных дней
+        self.missday_count = len(json.loads(self.missed_days))
 
-        # Проверяем, нужно ли пересчитывать `left_sum`
-        if not skip_calculation:
-            self.missday_count = len(json.loads(self.missed_days))
-            if not self.is_paid:
-                # Только пересчитываем `left_sum`, если это явно необходимо
-                self.left_sum = self.tarif - (self.missday_count * self.missday_cost)
-                if self.left_sum <= 0.0:
-                    self.is_paid = True
+        # Если не оплачено, пересчитываем left_sum
+        if not self.is_paid:
+            self.left_sum = self.tarif - (self.missday_count * self.missday_cost)
 
-        # Теперь вызываем стандартный `save` без кастомных аргументов
+            # Если left_sum меньше или равно 0, считаем долг полностью погашенным
+            if self.left_sum <= 0:
+                self.is_paid = True
+                self.left_sum = 0
+
+        # Вызываем стандартный метод save() для сохранения в базе данных
         super().save(*args, **kwargs)
 
-
-
     def apply_payment(self, amount):
+        if amount <= 0:
+            raise ValueError("Сумма платежа должна быть положительной")
+
+        # Уменьшаем долг
         self.left_sum -= amount
+        
+        # Проверка на отрицательный остаток и установка в 0, если долг полностью погашен
         if self.left_sum <= 0:
             self.is_paid = True
             self.left_sum = 0
-        # Применяем оплату и сохраняем изменения без пересчета `left_sum`
+
+        # Применяем оплату и сохраняем изменения без пересчета left_sum
         self.save(skip_calculation=True)
 
 
@@ -139,9 +178,6 @@ class IncomeTransaction(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        
-        # Применяем платеж к долгам и обновляем баланс
-        self.kid.apply_payment_to_debt(self.amount)
 
 
 
@@ -179,6 +215,7 @@ class Stuff(models.Model):
     password = models.CharField(max_length=128)  # Storing hashed password
     start_date = models.DateField()
     salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    bonus = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     def __str__(self):
         return self.name

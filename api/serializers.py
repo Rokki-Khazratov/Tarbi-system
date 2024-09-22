@@ -11,48 +11,45 @@ class IncomeTransactionSerializer(serializers.ModelSerializer):
         model = IncomeTransaction
         fields = '__all__'
 
-
-    
-
     def create(self, validated_data):
-        print("Начало создания транзакции")
         transaction = super().create(validated_data)
-        
         kid = transaction.kid
+        kid.apply_payment_to_debt(transaction.amount)
         print(f"Транзакция создана для ребёнка: {kid.full_name}, сумма: {transaction.amount}")
 
-        # Получаем архив месяца, который еще не оплачен (самый старый)
-        current_month_archive = kid.month_archives.filter(is_paid=False).order_by('year', 'month').first()
-        print(f"Найден архив для обновления: {current_month_archive}")
-
-        if current_month_archive:
-            print(f"Текущий архив перед вычитанием: {current_month_archive.year}-{current_month_archive.get_month_display()}, left_sum: {current_month_archive.left_sum}")
-
-            # Вычитаем сумму транзакции из left_sum
-            current_month_archive.left_sum -= transaction.amount
-
-            print(f"Обновленное значение left_sum: {current_month_archive.left_sum}")
-
-            # Если сумма left_sum становится <= 0, помечаем как оплаченное и устанавливаем left_sum в 0
-            if current_month_archive.left_sum <= 0:
-                current_month_archive.is_paid = True
-                current_month_archive.left_sum = 0
-                print("Архив помечен как оплачен")
-
-            # Сохраняем изменения в архиве
-            current_month_archive.save()
-            print(f"Архив сохранен: left_sum = {current_month_archive.left_sum}, is_paid = {current_month_archive.is_paid}")
-        else:
-            print("Не найден неоплаченный архив")
-
         return transaction
+
+class KidSerializer(serializers.ModelSerializer):
+    month_archives = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Kid
+        fields = ['id', 'full_name', 'phone_number', 'date_of_birth', 'sex', 'balance', 'month_archives']
+
+    def get_month_archives(self, obj):
+        filter_is_paid = self.context.get('filter_is_paid', None)
+
+        archives = obj.month_archives.all()
+
+        if filter_is_paid is not None:
+            if filter_is_paid.lower() == 'true':
+                filter_is_paid = True
+            elif filter_is_paid.lower() == 'false':
+                filter_is_paid = False
+            else:
+                raise serializers.ValidationError("Invalid value for 'is_paid'. Must be 'true' or 'false'.")
+            
+            # Применяем фильтрацию
+            archives = archives.filter(is_paid=filter_is_paid)
+
+        return MonthArchiveSerializer(archives, many=True).data
+
 
 
 
 class MonthArchiveSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)
-    month = serializers.CharField(source='get_month_display', read_only=True)
-    kid = serializers.CharField(source='kid.full_name', read_only=True)
+    kid = serializers.PrimaryKeyRelatedField(queryset=Kid.objects.all())  # Ожидаем ID ребенка
 
     class Meta:
         model = MonthArchive
@@ -63,58 +60,20 @@ class MonthArchiveSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        representation['missed_days'] = json.loads(instance.missed_days)  # Convert JSON string back to a list
+        representation['missed_days'] = json.loads(instance.missed_days)  # Преобразуем JSON-строку в список
         return representation
 
-    def validate(self, data):
-        # At the start of the month, ensure left_sum equals tarif
-        if self.instance is None or not self.instance.pk:
-            data['left_sum'] = data.get('tarif')
-        return data
+    def create(self, validated_data):
+        # Автоматически вычисляем значения при создании архива
+        missed_days_list = json.loads(validated_data['missed_days'])  # Преобразуем JSON строку в список
+        validated_data['missday_count'] = len(missed_days_list)
+        validated_data['left_sum'] = validated_data['tarif'] - (validated_data['missday_count'] * validated_data['missday_cost'])
 
-    def save(self, **kwargs):
-        instance = super().save(**kwargs)
+        # Если left_sum становится 0 или меньше, помечаем архив как оплаченный
+        if validated_data['left_sum'] <= 0:
+            validated_data['is_paid'] = True
 
-        # Calculate missday_count based on missed_days
-        instance.missday_count = len(json.loads(instance.missed_days))
-
-        # Check if 'left_sum' is provided in the initial data
-        if 'left_sum' in self.initial_data:
-            # Respect the manually provided left_sum
-            instance.left_sum = Decimal(self.initial_data['left_sum'])
-        else:
-            # Recalculate left_sum only if not manually provided
-            if not instance.is_paid:
-                instance.left_sum = instance.tarif - (instance.missday_count * instance.missday_cost)
-
-        # Automatically mark as paid if left_sum is 0.0 or less
-        if instance.left_sum <= 0.0:
-            instance.is_paid = True
-
-        instance.save()
-        return instance
-
-    def update(self, instance, validated_data):
-        instance = super().update(instance, validated_data)
-
-        # Calculate missday_count based on missed_days
-        instance.missday_count = len(json.loads(instance.missed_days))
-
-        # Check if 'left_sum' is provided in the initial data
-        if 'left_sum' in self.initial_data:
-            # Respect the manually provided left_sum
-            instance.left_sum = Decimal(self.initial_data['left_sum'])
-        else:
-            # Recalculate left_sum only if not manually provided
-            if not instance.is_paid:
-                instance.left_sum = instance.tarif - (instance.missday_count * instance.missday_cost)
-
-        # Automatically set is_paid to true if left_sum is 0 or less
-        if instance.left_sum <= 0.0:
-            instance.is_paid = True
-
-        instance.save()
-        return instance
+        return super().create(validated_data)
 
 
 
@@ -144,32 +103,6 @@ class KidsSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'full_name', 'phone_number', 'date_of_birth', 'sex','balance'
         ]
-
-class KidSerializer(serializers.ModelSerializer):
-    month_archives = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Kid
-        fields = ['id', 'full_name', 'phone_number', 'date_of_birth', 'sex', 'balance', 'month_archives']
-
-    def get_month_archives(self, obj):
-        filter_is_paid = self.context.get('filter_is_paid', None)
-
-        archives = obj.month_archives.all()
-
-        if filter_is_paid is not None:
-            # Преобразуем строку в логическое значение
-            if filter_is_paid.lower() == 'true':
-                filter_is_paid = True
-            elif filter_is_paid.lower() == 'false':
-                filter_is_paid = False
-            else:
-                raise serializers.ValidationError("Invalid value for 'is_paid'. Must be 'true' or 'false'.")
-            
-            # Применяем фильтрацию
-            archives = archives.filter(is_paid=filter_is_paid)
-
-        return MonthArchiveSerializer(archives, many=True).data
 
 
 

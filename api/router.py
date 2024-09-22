@@ -5,10 +5,11 @@ urlpatterns = [
     
     path('kids/', KidListCreateAPIView.as_view(), name='kid-list-create'),
     path('kids/<int:pk>/', KidRetrieveUpdateDestroyAPIView.as_view(), name='kid-retrieve-update-destroy'),
+    path('month-archives/', MonthArchiveListCreateAPIView.as_view(), name='month-list-create'),
     path('month-archives/<int:pk>/', MonthArchiveRetrieveUpdateDestroyAPIView.as_view(), name='month-archive-retrieve-update'),
 
     path('incometransactions/', IncomeTransactionListCreateAPIView.as_view(), name='income-transaction-list-create'),
-path('incometransactions/<int:pk>/', IncomeTransactionRetrieveUpdateDestroyAPIView.as_view(), name='income-transaction-retrieve-update-destroy'),
+    path('incometransactions/<int:pk>/', IncomeTransactionRetrieveUpdateDestroyAPIView.as_view(), name='income-transaction-retrieve-update-destroy'),
     
     path('stuff/', StaffListAPIView.as_view(), name='staff-list'),
     path('stuff/<int:pk>/', StuffDetailAPIView.as_view(), name='stuff-detail'),
